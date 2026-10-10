@@ -1,0 +1,14 @@
+cat >> .gitignore << EOF
+# Python
+__pycache__/
+*.pyc
+venv/
+*.log
+
+# VS Code
+.vscode/
+
+# Windows 系统文件
+Thumbs.db
+.DS_Store
+EOF
