@@ -219,10 +219,13 @@ class TestCaseGenerator:
         prompt = self.build_prompt(req_text, logic_text, headers)
 
         print("[4/4] 正在调用大模型生成测试案例 ...")
-        llm = LLMFactory.create()
-        response = llm.invoke(prompt)
+        # llm = LLMFactory.create()
+        # response = llm.invoke(prompt)
+        llm = LLMFactory(api_key=self.api_key)
+        response = llm.chat([{"role": "user", "content": prompt}])
 
-        content = getattr(response, "content", None)
+        # content = getattr(response, "content", None)
+        content = response if isinstance(response, str) else str(response)
         if content is None:
             content = str(response)
         if isinstance(content, list):
