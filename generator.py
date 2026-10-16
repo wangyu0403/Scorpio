@@ -164,35 +164,29 @@ class TestCaseGenerator:
     # Prompt 组装
     # ------------------------------------------------------------------
     def build_prompt(self, req_text, logic_text, headers):
-        """根据需求、逻辑与表头字段组装 Prompt，强制要求纯 JSON 数组输出。"""
-        header_str = "、".join(headers)
+        """从独立模板文件中读取 Prompt，并替换变量。"""
+        # 1. 获取项目根目录及模板文件路径
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(base_dir, "prompts", "test_case_prompt.md")
 
-        example_obj = {}
-        for h in headers:
-            example_obj[h] = f"{h}的示例内容"
+        # 2. 读取模板文件内容
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                template = f.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"找不到 Prompt 模板文件：{prompt_path}，请检查 prompts 目录是否存在。")
+
+        # 3. 构造示例 JSON 对象
+        header_str = "、".join(headers)
+        example_obj = {h: f"{h}的示例内容" for h in headers}
         example_str = json.dumps([example_obj], ensure_ascii=False, indent=2)
 
-        prompt = f"""你是一位资深测试工程师，请根据下面的需求文档和业务逻辑描述，设计完整、可执行的测试案例。
+        # 4. 替换模板占位符（注意：用 replace 而不是 format，防止 JSON 示例中的大括号引发冲突）
+        prompt = template.replace("{req_text}", req_text) \
+                         .replace("{logic_text}", logic_text) \
+                         .replace("{header_str}", header_str) \
+                         .replace("{example_str}", example_str)
 
-【需求文档内容开始】
-{req_text}
-【需求文档内容结束】
-
-【业务逻辑描述内容开始】
-{logic_text}
-【业务逻辑描述内容结束】
-
-【输出要求】
-1. 必须以纯 JSON 数组格式输出，禁止输出 Markdown 代码块标记（禁止出现三反引号 json 之类的标记）。
-2. 数组中的每个元素是一个 JSON 对象，代表一条测试案例。
-3. 每个对象的 key 必须且只能使用以下字段，顺序保持一致：{header_str}
-4. 每个字段的值必须是字符串，不能为空；确实无内容时填写“无”。
-5. 测试案例需覆盖正常场景、边界场景、异常场景与权限/兼容性场景，条数不少于 10 条。
-6. 除 JSON 数组外，不要输出任何解释性文字、前后缀说明或注释。
-
-【输出格式示例】
-{example_str}
-"""
         return prompt
 
     # ------------------------------------------------------------------
