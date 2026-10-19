@@ -12,6 +12,7 @@ import os
 import re
 import json
 from datetime import datetime
+from wsgiref import headers
 
 import docx
 import pandas as pd
@@ -225,15 +226,15 @@ class TestCaseGenerator:
         if isinstance(content, list):
             content = "".join(str(item) for item in content)
 
-        output_path = self.save_output(content, req_name, output_dir)
+        output_path = self.save_output(content, req_name, output_dir, headers)
         return output_path
 
     # ------------------------------------------------------------------
     # 结果保存
     # ------------------------------------------------------------------
-    def save_output(self, content, req_name, output_dir):
+    def save_output(self, content, req_name, output_dir, headers):
         """解析大模型返回的 JSON，转为 DataFrame 并按规范命名保存到 output 目录。"""
-        records = self._parse_json_array(content)
+        records = self._parse_json_array(content, expected_headers=headers)
 
         df = pd.DataFrame(records)
 
@@ -252,51 +253,128 @@ class TestCaseGenerator:
         df.to_excel(output_path, index=False, engine="openpyxl")
         return os.path.abspath(output_path)
 
+    # @staticmethod
+    # def _parse_json_array(content):
+    #     """容错解析大模型输出：自动去除 Markdown 代码块标记，截取 JSON 数组。"""
+    #     if content is None:
+    #         raise ValueError("大模型返回内容为空。")
+    #
+    #     if isinstance(content, (list, dict)):
+    #         data = content
+    #     else:
+    #         text = str(content).strip()
+    #
+    #         # 去掉 ```json / ``` 标记
+    #         text = re.sub(r"^```[a-zA-Z]*\s*", "", text).strip()
+    #         text = re.sub(r"```\s*$", "", text).strip()
+    #
+    #         try:
+    #             data = json.loads(text)
+    #         except json.JSONDecodeError:
+    #             # 容错：截取第一个 [ 到最后一个 ] 之间的内容
+    #             start = text.find("[")
+    #             end = text.rfind("]")
+    #             if start == -1 or end == -1 or end <= start:
+    #                 raise ValueError(
+    #                     f"无法从大模型返回内容中解析出 JSON 数组，原始内容前 500 字符：\n{text[:500]}"
+    #                 )
+    #             try:
+    #                 data = json.loads(text[start:end + 1])
+    #             except json.JSONDecodeError as e:
+    #                 raise ValueError(f"JSON 解析失败：{e}，原始内容前 500 字符：\n{text[:500]}")
+    #
+    #     # 兼容模型把数组包在对象里的情况
+    #     if isinstance(data, dict):
+    #         for key in ("testcases", "test_cases", "data", "cases", "result", "list", "测试案例"):
+    #             if isinstance(data.get(key), list):
+    #                 data = data[key]
+    #                 break
+    #         else:
+    #             data = [data]
+    #
+    #     if not isinstance(data, list) or not data:
+    #         raise ValueError("大模型返回内容不是有效的 JSON 数组，或数组为空。")
+    #
+    #     # 过滤掉非字典元素
+    #     data = [item for item in data if isinstance(item, dict)]
+    #     if not data:
+    #         raise ValueError("JSON 数组中没有有效的测试案例对象。")
+    #
+    #     return data
+
+
+
     @staticmethod
-    def _parse_json_array(content):
-        """容错解析大模型输出：自动去除 Markdown 代码块标记，截取 JSON 数组。"""
-        if content is None:
-            raise ValueError("大模型返回内容为空。")
+    def _parse_json_array(content: str, expected_headers: list = None) -> list:
+        """从大模型返回的文本中提取并解析 JSON 数组（防御性加强版）。"""
+        import json_repair
 
-        if isinstance(content, (list, dict)):
-            data = content
-        else:
-            text = str(content).strip()
+        if not content or not isinstance(content, str) or not content.strip():
+            raise ValueError("模型返回内容为空或非字符串")
 
-            # 去掉 ```json / ``` 标记
-            text = re.sub(r"^```[a-zA-Z]*\s*", "", text).strip()
-            text = re.sub(r"```\s*$", "", text).strip()
+        #  坑3防御：拦截截断。括号数量不对大概率是被 max_tokens 截断了
+        if content.count("[") != content.count("]"):
+            raise ValueError(f"返回的 JSON 括号不匹配（可能因长度限制被截断），原始内容前 200 字符：\n{content[:200]}")
 
-            try:
-                data = json.loads(text)
-            except json.JSONDecodeError:
-                # 容错：截取第一个 [ 到最后一个 ] 之间的内容
-                start = text.find("[")
-                end = text.rfind("]")
-                if start == -1 or end == -1 or end <= start:
-                    raise ValueError(
-                        f"无法从大模型返回内容中解析出 JSON 数组，原始内容前 500 字符：\n{text[:500]}"
-                    )
-                try:
-                    data = json.loads(text[start:end + 1])
-                except json.JSONDecodeError as e:
-                    raise ValueError(f"JSON 解析失败：{e}，原始内容前 500 字符：\n{text[:500]}")
+        # 使用 json_repair 解析
+        try:
+            result = json_repair.loads(content)
+        except Exception as e:
+            raise ValueError(f"JSON 修复解析彻底失败: {e}，原始内容前 500 字符：\n{content[:500]}")
 
-        # 兼容模型把数组包在对象里的情况
-        if isinstance(data, dict):
-            for key in ("testcases", "test_cases", "data", "cases", "result", "list", "测试案例"):
-                if isinstance(data.get(key), list):
-                    data = data[key]
+        #  坑2防御：它不抛异常，而是返回怪东西（空串、None、数字）
+        if not isinstance(result, (list, dict)):
+            raise ValueError(
+                f"解析结果类型异常（{type(result).__name__}），可能是模型返回了错误信息，原始内容：\n{content[:200]}")
+
+        #  坑4防御：说明文字里的方括号被合并成嵌套数组（如 [[1], [{"name": "c1"}]]）
+        if isinstance(result, list) and result and isinstance(result[0], list):
+            # 提取包含字典最多的那个子列表
+            all_lists = [item for item in result if isinstance(item, list)]
+            if all_lists:
+                best_list = max(all_lists, key=lambda x: sum(1 for i in x if isinstance(i, dict)))
+                result = best_list
+
+        #  坑1防御：包装层解包（处理 {"error": ...} 或 {"data": {"list": [...]}}）
+        if isinstance(result, dict):
+            # 严格限制白名单，且只找第一层或两层嵌套
+            for key in ("testcases", "test_cases", "cases", "list"):
+                val = result.get(key)
+                if isinstance(val, list):
+                    result = val
+                    break
+                # 处理两层嵌套：{"code":0, "data": {"list": [...]}}
+                if isinstance(val, dict) and "list" in val and isinstance(val["list"], list):
+                    result = val["list"]
                     break
             else:
-                data = [data]
+                # 如果没命中白名单，且包含 "error"，直接拦截
+                if "error" in result or "code" in result and result.get("code") != 200:
+                    raise ValueError(f"模型返回了异常信封: {result}")
+                # 兜底：可能是单个合法案例对象
+                result = [result]
 
-        if not isinstance(data, list) or not data:
-            raise ValueError("大模型返回内容不是有效的 JSON 数组，或数组为空。")
+        if not isinstance(result, list):
+            raise ValueError(f"最终解析结果不是列表，实际类型: {type(result).__name__}")
 
-        # 过滤掉非字典元素
-        data = [item for item in data if isinstance(item, dict)]
-        if not data:
-            raise ValueError("JSON 数组中没有有效的测试案例对象。")
+        #  坑3 & 坑5防御：结构校验（Schema Validation）。单引号 ,} 被切坏或截断的数据，在这里会被拦下。
+        valid_cases = []
+        for item in result:
+            if not isinstance(item, dict):
+                print(f"[警告] 丢弃非字典元素: {item}")
+                continue
 
-        return data
+            # 如果传入了期望的表头字段，检查这个案例是否缺失了必填字段
+            if expected_headers:
+                missing_keys = [h for h in expected_headers if h not in item]
+                # 如果是空字典，或者缺失了超过一半的字段，判定为废数据
+                if not item or len(missing_keys) > len(expected_headers) / 2:
+                    print(f"[警告] 丢弃残缺案例（缺失字段 {missing_keys}）: {item}")
+                    continue
+
+            valid_cases.append(item)
+
+        if not valid_cases:
+            raise ValueError(f"解析后没有合法的测试案例，原始结果: {result}")
+
+        return valid_cases

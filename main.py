@@ -9,6 +9,7 @@ main.py
 
 import os
 import sys
+import traceback
 
 from config.settings import APP_ENV, api_key, mask_key
 from generator import TestCaseGenerator, find_single_file
@@ -81,6 +82,7 @@ def main():
     except Exception as e:
         print("-" * 60)
         print(f"[错误] 生成失败：{type(e).__name__} - {e}")
+        traceback.print_exc()
         print("=" * 60)
         sys.exit(1)
 
