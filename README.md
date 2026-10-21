@@ -69,6 +69,8 @@ text
   [2] 评审需求文档
 输入对应数字并回车，生成的文件将自动保存在 output/ 目录下。
 
+体验 V2 平台：在终端运行 uvicorn api:app --reload，然后在浏览器打开 http://127.0.0.1:8000/docs 体验可视化 API 接口。
+
 ⚠️ 注意事项 (Important Notes)
 文档格式限制：本项目目前仅支持 .docx 格式的 Word 文档。如果手头是老版的 .doc 文件，请先用 Word/WPS 另存为 .docx 后再使用。
 
