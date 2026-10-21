@@ -69,7 +69,18 @@ text
   [2] 评审需求文档
 输入对应数字并回车，生成的文件将自动保存在 output/ 目录下。
 
-体验 V2 平台：在终端运行 uvicorn api:app --reload，然后在浏览器打开 http://127.0.0.1:8000/docs 体验可视化 API 接口。
+### 5. 体验 V2 平台 (FastAPI 后端服务)
+如果你希望通过 Web API 或可视化界面来调用生成和评审功能，请按以下步骤启动 FastAPI 服务：
+
+**① 启动后端服务**
+在项目根目录下的终端（确保处于 `(.venv)` 虚拟环境）中运行：
+```bash
+uvicorn api:app --reload
+② 访问可视化接口文档
+在浏览器中打开以下地址，体验 Swagger UI 交互式 API 文档：
+👉 http://127.0.0.1:8000/docs
+
+(提示：在 Swagger 页面中，你可以直接点击 Try it out，上传你的文档文件，点击 Execute 即可在线测试接口并下载生成的 Excel 文件。)
 
 ⚠️ 注意事项 (Important Notes)
 文档格式限制：本项目目前仅支持 .docx 格式的 Word 文档。如果手头是老版的 .doc 文件，请先用 Word/WPS 另存为 .docx 后再使用。
