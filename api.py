@@ -22,16 +22,19 @@ from sqlalchemy.orm import Session
 from config.settings import api_key
 from generator import TestCaseGenerator
 from reviewer import RequirementReviewer
-from database import TaskRecord, DeleteAuditLog, get_db
+from database import init_db, TaskRecord, DeleteAuditLog, get_db
 
 
 app = FastAPI(title="Test Case & Requirement Review API")
+
+# 启动时初始化数据库表
+init_db()  #
 
 # ================= 基础配置 =================
 
 load_dotenv()
 HISTORY_DIR = os.getenv(
-    "HISTORY_DIR", os.path.join(tempfile.gettempdir(), "scorpio_history")
+    "SCORPIO_HISTORY_DIR", os.path.join(tempfile.gettempdir(), "scorpio_history")
 )
 
 if not os.path.isabs(HISTORY_DIR):
@@ -126,7 +129,7 @@ async def generate(
     docx_file: UploadFile = File(...),
     md_file: UploadFile = File(...),
     xlsx_file: UploadFile = File(...),
-    x_account_id: str = Header(..., alias="x_account_id"),
+    x_account_id: str = Header(..., alias="x-account-id"),
     db: Session = Depends(get_db),
 ):
     """接收 docx / md / xlsx，生成测试用例并落库（归属 x_account_id）。"""
@@ -186,7 +189,7 @@ async def generate(
 @app.post("/api/review")
 async def review(
     docx_file: UploadFile = File(...),
-    x_account_id: str = Header(..., alias="x_account_id"),
+    x_account_id: str = Header(..., alias="x-account-id"),
     db: Session = Depends(get_db),
 ):
     """接收 docx，生成需求评审报告并落库（归属 x_account_id）。"""
@@ -240,7 +243,7 @@ async def review(
 
 @app.get("/api/history")
 async def get_history(
-    x_account_id: str = Header(..., alias="x_account_id"),
+    x_account_id: str = Header(..., alias="x-account-id"),
     db: Session = Depends(get_db),
 ):
     """仅返回当前账号名下、状态为 ACTIVE 的记录。"""
@@ -279,7 +282,7 @@ async def get_history(
 @app.get("/api/files/{task_id}")
 async def download_file(
     task_id: str,
-    x_account_id: str = Header(..., alias="x_account_id"),
+    x_account_id: str = Header(..., alias="x-account-id"),
     db: Session = Depends(get_db),
 ):
     """安全下载：记录不存在 / 归属不符 / 状态非 ACTIVE / 文件缺失 一律 404。"""
