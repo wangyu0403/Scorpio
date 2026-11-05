@@ -315,7 +315,7 @@ async def download_file(
 async def request_delete_file(
     task_id: str,
     reason: str = Query(..., description="删除原因"),
-    x_admin_id: str = Header(..., alias="x_admin_id"),
+    x_admin_id: str = Header(..., alias="x-admin-d"),
     db: Session = Depends(get_db),
 ):
     """不物理删除文件：写入审计日志，并把状态置为 PENDING_PURGE 等待定时清理。"""
